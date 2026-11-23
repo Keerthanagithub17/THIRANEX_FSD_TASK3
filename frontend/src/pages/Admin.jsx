@@ -1,0 +1,23 @@
+import { useEffect, useState } from 'react';
+import { Plus, Pencil, Trash2, Package, ClipboardList } from 'lucide-react';
+import api from '../api';
+const blank={name:'',description:'',price:'',image_url:'',category:'General',stock:0};
+export default function Admin() {
+  const [tab,setTab]=useState('products'); const [products,setProducts]=useState([]); const [orders,setOrders]=useState([]);
+  const [form,setForm]=useState(blank); const [editing,setEditing]=useState(null); const [showForm,setShowForm]=useState(false); const [message,setMessage]=useState('');
+  const load=async()=>{const [p,o]=await Promise.all([api.get('/products'),api.get('/orders')]);setProducts(p.data);setOrders(o.data);};
+  useEffect(()=>{load().catch(()=>setMessage('Unable to load admin data.'));},[]);
+  const edit=p=>{setForm({...p});setEditing(p.id);setShowForm(true);};
+  const save=async e=>{e.preventDefault();try{editing?await api.put(`/products/${editing}`,form):await api.post('/products',form);setShowForm(false);setForm(blank);setEditing(null);setMessage('Product saved successfully.');load();}catch(err){setMessage(err.response?.data?.message||'Could not save product.');}};
+  const del=async id=>{if(!confirm('Delete this product?'))return;try{await api.delete(`/products/${id}`);load();}catch(err){setMessage(err.response?.data?.message||'Could not delete product.');}};
+  const status=async(id,value)=>{try{await api.patch(`/orders/${id}/status`,{status:value});load();}catch{setMessage('Could not update order status.');}};
+  return <div className="container page-section"><div className="section-heading"><div><span className="eyebrow">STORE CONTROL CENTER</span><h2>Admin dashboard</h2></div><span className="admin-tag">ADMIN</span></div>
+    <div className="admin-stats"><div><Package/><span>Products</span><strong>{products.length}</strong></div><div><ClipboardList/><span>Orders</span><strong>{orders.length}</strong></div><div><strong>₹{orders.reduce((s,o)=>s+Number(o.total),0).toLocaleString('en-IN')}</strong><span>Order revenue</span></div></div>
+    <div className="admin-tabs"><button className={tab==='products'?'selected':''} onClick={()=>setTab('products')}>Products</button><button className={tab==='orders'?'selected':''} onClick={()=>setTab('orders')}>Orders</button></div>
+    {message&&<div className="notice">{message}<button onClick={()=>setMessage('')}>×</button></div>}
+    {tab==='products'?<><div className="admin-toolbar"><h3>Product inventory</h3><button className="primary-btn" onClick={()=>{setForm(blank);setEditing(null);setShowForm(!showForm);}}><Plus size={17}/> Add product</button></div>
+      {showForm&&<form className="product-form" onSubmit={save}><h3>{editing?'Edit product':'New product'}</h3><div className="form-grid">{[['name','Product name'],['price','Price (₹)'],['category','Category'],['stock','Stock quantity'],['image_url','Image URL']].map(([k,l])=><label key={k}>{l}<input required={k==='name'||k==='price'} type={k==='price'||k==='stock'?'number':'text'} min={k==='price'||k==='stock'?'0':undefined} value={form[k]??''} onChange={e=>setForm({...form,[k]:e.target.value})}/></label>)}<label className="span-2">Description<textarea rows="2" value={form.description||''} onChange={e=>setForm({...form,description:e.target.value})}/></label></div><button className="primary-btn">Save product</button> <button type="button" className="outline-btn" onClick={()=>setShowForm(false)}>Cancel</button></form>}
+      <div className="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead><tbody>{products.map(p=><tr key={p.id}><td><div className="table-product"><img src={p.image_url} alt=""/>{p.name}</div></td><td>{p.category}</td><td>₹{Number(p.price).toLocaleString('en-IN')}</td><td>{p.stock}</td><td><button className="icon-btn" onClick={()=>edit(p)}><Pencil size={16}/></button><button className="icon-btn danger-text" onClick={()=>del(p.id)}><Trash2 size={16}/></button></td></tr>)}</tbody></table></div>
+    </>:<div className="table-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Total</th><th>Status</th></tr></thead><tbody>{orders.map(o=><tr key={o.id}><td>#{o.id}<small className="table-sub">{o.items?.map(i=>`${i.product_name} × ${i.quantity}`).join(', ')}</small></td><td>{o.customer_name}<small className="table-sub">{o.email}</small></td><td>{new Date(o.created_at).toLocaleDateString('en-IN')}</td><td>₹{Number(o.total).toLocaleString('en-IN')}</td><td><select value={o.status} onChange={e=>status(o.id,e.target.value)}>{['Pending','Processing','Shipped','Delivered','Cancelled'].map(s=><option key={s}>{s}</option>)}</select></td></tr>)}</tbody></table></div>}
+  </div>;
+}
